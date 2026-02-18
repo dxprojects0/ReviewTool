@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
@@ -13,11 +13,11 @@ import {
   Phone,
   Edit2,
   MessageSquare,
-  ShieldCheck,
   Star,
   ChevronRight,
   Eye,
-  ExternalLink
+  ExternalLink,
+  User
 } from 'lucide-react';
 import { 
   POSITIVE_TEMPLATES, 
@@ -28,47 +28,213 @@ import {
   MOOD_EMOJIS 
 } from './constants';
 import { PartnerData, Mood, Template, Language, ReviewLocation } from './types';
+import brandCodes from './brand-codes.json';
 
 // --- Session Constants ---
 const SESSION_KEY = 'dx_session_expiry';
+const BRAND_SESSION_KEY = 'dx_brand_name';
+const BRAND_CODE_SESSION_KEY = 'dx_brand_code';
+const BRAND_USERS_KEY = 'dx_brand_users';
 const SESSION_DURATION = 15 * 24 * 60 * 60 * 1000; 
+const ADMIN_PANEL_PASSWORD = 'dxadmin2026';
 
-// Authorized Credentials
-const AUTHORIZED_PASSWORDS = ['dx502skb'];
+type BrandCodeMap = Record<string, string>;
+const DEFAULT_BRAND_CODE_MAP = brandCodes as BrandCodeMap;
 
-// --- Helper for Animated Placeholder ---
-const useAnimatedPlaceholder = (suggestions: string[], speed: number = 100) => {
-  const [placeholder, setPlaceholder] = useState('');
-  const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const [charIndex, setCharIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
+const sanitizeBrandCodeMap = (value: unknown): BrandCodeMap => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
 
-  useEffect(() => {
-    const currentSuggestion = suggestions[suggestionIndex];
-    const timeout = setTimeout(() => {
-      if (!isDeleting && charIndex < currentSuggestion.length) {
-        setPlaceholder(prev => prev + currentSuggestion[charIndex]);
-        setCharIndex(prev => prev + 1);
-      } else if (isDeleting && charIndex > 0) {
-        setPlaceholder(prev => prev.slice(0, -1));
-        setCharIndex(prev => prev - 1);
-      } else if (!isDeleting && charIndex === currentSuggestion.length) {
-        setTimeout(() => setIsDeleting(true), 1500);
-      } else if (isDeleting && charIndex === 0) {
-        setIsDeleting(false);
-        setSuggestionIndex(prev => (prev + 1) % suggestions.length);
-      }
-    }, isDeleting ? speed / 2 : speed);
-
-    return () => clearTimeout(timeout);
-  }, [charIndex, isDeleting, suggestionIndex, suggestions, speed]);
-
-  return placeholder;
+  const cleaned: BrandCodeMap = {};
+  for (const [code, brandName] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedCode = code.trim();
+    const normalizedBrand = typeof brandName === 'string' ? brandName.trim() : '';
+    if (normalizedCode && normalizedBrand) {
+      cleaned[normalizedCode] = normalizedBrand;
+    }
+  }
+  return cleaned;
 };
 
+const getInitialBrandCodeMap = (): BrandCodeMap => {
+  try {
+    const stored = localStorage.getItem(BRAND_USERS_KEY);
+    if (!stored) {
+      return { ...DEFAULT_BRAND_CODE_MAP };
+    }
+    const parsed = JSON.parse(stored);
+    const cleaned = sanitizeBrandCodeMap(parsed);
+    if (Object.keys(cleaned).length === 0) {
+      return { ...DEFAULT_BRAND_CODE_MAP };
+    }
+    return cleaned;
+  } catch {
+    return { ...DEFAULT_BRAND_CODE_MAP };
+  }
+};
+
+type OwnerFeedback = {
+  name: string;
+  business: string;
+  review: string;
+  rating: 4 | 5;
+};
+
+const OWNER_FEEDBACKS: OwnerFeedback[] = [
+  {
+    name: 'Rohan Malhotra',
+    business: 'Malhotra Dental Care, Delhi',
+    review: 'I used Review Booster for 3 weeks and my review count doubled. Follow-ups are faster now.',
+    rating: 5
+  },
+  {
+    name: 'Priya Nair',
+    business: 'Nair Bake House, Kochi',
+    review: 'Simple and practical tool. My team now sends review links in seconds after billing.',
+    rating: 4
+  },
+  {
+    name: 'Suresh Iyer',
+    business: 'Iyer Filter Coffee, Chennai',
+    review: 'We started getting steady 5-star reviews. The WhatsApp message format works really well.',
+    rating: 5
+  },
+  {
+    name: 'Jason Miller',
+    business: 'Miller Auto Spa, Houston',
+    review: 'Clean workflow and no confusion for staff. Customer response rate improved a lot.',
+    rating: 4
+  },
+  {
+    name: 'Kavya Lakshmi',
+    business: 'Lakshmi Skin Studio, Bengaluru',
+    review: 'I used Review Booster daily. Our online trust grew and appointment calls increased.',
+    rating: 5
+  },
+  {
+    name: 'Arjun Reddy',
+    business: 'Reddy Car Care, Hyderabad',
+    review: 'Very useful for service businesses. We collect reviews right after delivery and it helps.',
+    rating: 4
+  },
+  {
+    name: 'Meera Krishnan',
+    business: 'Krishnan Silks, Madurai',
+    review: 'Good speed and easy setup. Review quality improved and customers mention staff by name.',
+    rating: 5
+  },
+  {
+    name: 'Emily Carter',
+    business: 'Carter Pet Clinic, Austin',
+    review: 'I used this tool with my front desk team and we saw better Google visibility in a month.',
+    rating: 4
+  },
+  {
+    name: 'Faizal Rahman',
+    business: 'Rahman Electronics, Coimbatore',
+    review: 'Review Booster made collection process consistent. We now get regular 4 to 5 star feedback.',
+    rating: 5
+  },
+  {
+    name: 'Neha Patel',
+    business: 'Patel Sweets, Surat',
+    review: 'Customers respond quickly on WhatsApp. This tool helped us build credibility online.',
+    rating: 4
+  }
+];
+
+// --- Helper for Animated Placeholder ---
 // --- Components ---
 
-const HeaderLogo = ({ businessName, onEdit }: { businessName: string, onEdit: () => void }) => (
+const FeedbackRow = ({
+  items,
+  direction,
+  duration
+}: {
+  items: OwnerFeedback[];
+  direction: 'left' | 'right';
+  duration: number;
+}) => {
+  const [isPaused, setIsPaused] = useState(false);
+  const loopItems = useMemo(() => [...items, ...items], [items]);
+
+  return (
+    <div
+      className="overflow-hidden rounded-2xl border border-slate-200 bg-white/70"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={() => setIsPaused(true)}
+      onTouchEnd={() => setIsPaused(false)}
+      onTouchCancel={() => setIsPaused(false)}
+    >
+      <div
+        className={`flex w-max gap-4 py-4 px-4 ${direction === 'left' ? 'dx-feedback-left' : 'dx-feedback-right'} ${isPaused ? 'dx-feedback-paused' : ''}`}
+        style={{ animationDuration: `${duration}s` }}
+      >
+        {loopItems.map((item, idx) => (
+          <article key={`${item.name}-${idx}`} className="w-[280px] sm:w-[320px] bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 mb-2">
+              {Array.from({ length: 5 }).map((_, starIdx) => (
+                <Star
+                  key={starIdx}
+                  className={`w-3.5 h-3.5 ${starIdx < item.rating ? 'text-amber-400 fill-current' : 'text-slate-200'}`}
+                />
+              ))}
+              <span className="text-[10px] font-black text-slate-500 ml-1">{item.rating}.0</span>
+            </div>
+            <p className="text-sm font-bold text-slate-700 leading-relaxed">"{item.review}"</p>
+            <p className="mt-3 text-xs font-black text-slate-900 uppercase tracking-wide">{item.name}</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{item.business}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const FeedbackSection = () => (
+  <section className="mt-10 sm:mt-12">
+    <style>{`
+      @keyframes dx-feedback-scroll-left {
+        from { transform: translateX(0); }
+        to { transform: translateX(-50%); }
+      }
+      @keyframes dx-feedback-scroll-right {
+        from { transform: translateX(-50%); }
+        to { transform: translateX(0); }
+      }
+      .dx-feedback-left {
+        animation-name: dx-feedback-scroll-left;
+        animation-timing-function: linear;
+        animation-iteration-count: infinite;
+        will-change: transform;
+      }
+      .dx-feedback-right {
+        animation-name: dx-feedback-scroll-right;
+        animation-timing-function: linear;
+        animation-iteration-count: infinite;
+        will-change: transform;
+      }
+      .dx-feedback-paused {
+        animation-play-state: paused;
+      }
+    `}</style>
+
+    <div className="text-center mb-6">
+      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600">Owner Feedback</p>
+      <h3 className="mt-2 text-2xl sm:text-3xl font-black text-slate-900 uppercase tracking-tight">Trusted by Business Owners</h3>
+      {/* <p className="mt-2 text-xs font-bold text-slate-500 uppercase tracking-[0.15em]">Touch and hold to pause the review stream</p> */}
+    </div>
+
+    <div className="space-y-4">
+      <FeedbackRow items={OWNER_FEEDBACKS.slice(0, 5)} direction="left" duration={36} />
+      <FeedbackRow items={OWNER_FEEDBACKS.slice(5)} direction="right" duration={40} />
+    </div>
+  </section>
+);
+
+const HeaderLogo = ({ businessName }: { businessName: string }) => (
   <div className="flex flex-col items-center mb-6 w-full px-4 text-center">
     <motion.div 
       initial={{ y: -10, opacity: 0 }}
@@ -90,15 +256,10 @@ const HeaderLogo = ({ businessName, onEdit }: { businessName: string, onEdit: ()
       </h2>
     </div>
 
-    <motion.button 
-      whileTap={{ scale: 0.96 }}
-      onClick={onEdit}
-      className="mt-6 flex items-center gap-2 px-5 py-2 bg-white border border-slate-200 text-slate-600 rounded-full text-[11px] sm:text-xs font-black shadow-sm hover:shadow-md transition-all active:bg-slate-50"
-    >
+    <div className="mt-6 flex items-center gap-2 px-5 py-2 bg-white border border-slate-200 text-slate-600 rounded-full text-[11px] sm:text-xs font-black shadow-sm">
       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
       Hi, <span className="text-blue-600 truncate max-w-[120px]">{businessName || 'Partner'}</span> 
-      <Edit2 className="w-3 h-3 ml-0.5" />
-    </motion.button>
+    </div>
   </div>
 );
 
@@ -169,24 +330,300 @@ const TemplateSelectionModal = ({
   </AnimatePresence>
 );
 
-const ReviewBooster = ({ onLogout }: { onLogout: () => void }) => {
+const AdminPanel = ({
+  isOpen,
+  onClose,
+  brandCodeMap,
+  onSaveUsers,
+  onResetToDefault
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  brandCodeMap: BrandCodeMap;
+  onSaveUsers: (nextUsers: BrandCodeMap) => void;
+  onResetToDefault: () => void;
+}) => {
+  const [adminPassword, setAdminPassword] = useState('');
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [brandInput, setBrandInput] = useState('');
+  const [editingCode, setEditingCode] = useState<string | null>(null);
+  const [panelError, setPanelError] = useState('');
+  const [panelSuccess, setPanelSuccess] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) {
+      setAdminPassword('');
+      setIsAdminUnlocked(false);
+      setCodeInput('');
+      setBrandInput('');
+      setEditingCode(null);
+      setPanelError('');
+      setPanelSuccess('');
+    }
+  }, [isOpen]);
+
+  const users = useMemo(
+    () => Object.entries(brandCodeMap).sort((a, b) => a[0].localeCompare(b[0])),
+    [brandCodeMap]
+  );
+
+  const showError = (message: string) => {
+    setPanelSuccess('');
+    setPanelError(message);
+  };
+
+  const showSuccess = (message: string) => {
+    setPanelError('');
+    setPanelSuccess(message);
+  };
+
+  const handleUnlockAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPassword.trim() === ADMIN_PANEL_PASSWORD) {
+      setIsAdminUnlocked(true);
+      showSuccess('Admin unlocked');
+      return;
+    }
+    showError('Invalid admin password');
+  };
+
+  const handleCreateOrUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalizedCode = codeInput.trim();
+    const normalizedBrand = brandInput.trim();
+
+    if (!normalizedCode || !normalizedBrand) {
+      showError('Code and brand name are required');
+      return;
+    }
+
+    const nextUsers = { ...brandCodeMap };
+    if (editingCode && editingCode !== normalizedCode) {
+      delete nextUsers[editingCode];
+    }
+
+    const isDuplicate = (!editingCode || editingCode !== normalizedCode) && Boolean(nextUsers[normalizedCode]);
+    if (isDuplicate) {
+      showError('This code already exists');
+      return;
+    }
+
+    nextUsers[normalizedCode] = normalizedBrand;
+    onSaveUsers(nextUsers);
+
+    setCodeInput('');
+    setBrandInput('');
+    setEditingCode(null);
+    showSuccess(editingCode ? 'User updated' : 'User created');
+  };
+
+  const handleEdit = (code: string, brandName: string) => {
+    setCodeInput(code);
+    setBrandInput(brandName);
+    setEditingCode(code);
+    setPanelError('');
+    setPanelSuccess('');
+  };
+
+  const handleDelete = (code: string) => {
+    const nextUsers = { ...brandCodeMap };
+    delete nextUsers[code];
+    onSaveUsers(nextUsers);
+
+    if (editingCode === code) {
+      setCodeInput('');
+      setBrandInput('');
+      setEditingCode(null);
+    }
+    showSuccess('User deleted');
+  };
+
+  const handleResetDefaults = () => {
+    onResetToDefault();
+    setCodeInput('');
+    setBrandInput('');
+    setEditingCode(null);
+    showSuccess('Reset to default JSON data');
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ scale: 0.96, y: 20, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.96, y: 20, opacity: 0 }}
+            className="relative bg-white w-full max-w-4xl rounded-3xl p-6 sm:p-8 shadow-2xl border border-white max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">Admin Panel</h3>
+              <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors active:scale-90">
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            {!isAdminUnlocked ? (
+              <form onSubmit={handleUnlockAdmin} className="space-y-4">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block px-1">
+                  Admin Password
+                </label>
+                <input
+                  type="password"
+                  className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-blue-500 focus:outline-none shadow-inner"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                />
+                <button
+                  type="submit"
+                  className="w-full py-4 bg-slate-900 text-white font-black rounded-xl uppercase tracking-widest text-xs"
+                >
+                  Unlock Admin
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-6">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5">
+                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">
+                    {editingCode ? 'Update User' : 'Create User'}
+                  </h4>
+                  <form onSubmit={handleCreateOrUpdate} className="grid sm:grid-cols-3 gap-3">
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold focus:border-blue-500 focus:outline-none"
+                      placeholder="Code"
+                      value={codeInput}
+                      onChange={(e) => setCodeInput(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold focus:border-blue-500 focus:outline-none"
+                      placeholder="Brand Name"
+                      value={brandInput}
+                      onChange={(e) => setBrandInput(e.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      className="w-full px-4 py-3 bg-blue-600 text-white font-black rounded-xl uppercase tracking-widest text-xs"
+                    >
+                      {editingCode ? 'Update User' : 'Create User'}
+                    </button>
+                  </form>
+                  {editingCode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCodeInput('');
+                        setBrandInput('');
+                        setEditingCode(null);
+                        setPanelError('');
+                        setPanelSuccess('');
+                      }}
+                      className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-700"
+                    >
+                      Cancel editing
+                    </button>
+                  )}
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    Registered Users
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {users.length === 0 ? (
+                      <div className="px-4 py-6 text-sm text-slate-400 font-bold">No users found.</div>
+                    ) : (
+                      users.map(([code, brandName]) => (
+                        <div key={code} className="px-4 py-4 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-slate-900 truncate">{brandName}</p>
+                            <p className="text-xs font-bold text-slate-400 truncate">{code}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(code, brandName)}
+                              className="px-3 py-2 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(code)}
+                              className="px-3 py-2 bg-red-50 text-red-500 border border-red-100 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">JSON Preview</p>
+                    <button
+                      type="button"
+                      onClick={handleResetDefaults}
+                      className="px-3 py-2 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest"
+                    >
+                      Reset Defaults
+                    </button>
+                  </div>
+                  <textarea
+                    readOnly
+                    value={JSON.stringify(brandCodeMap, null, 2)}
+                    className="w-full min-h-[170px] px-4 py-3 bg-slate-900 text-slate-200 rounded-xl text-xs font-mono focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {(panelError || panelSuccess) && (
+              <p className={`mt-5 text-xs font-black uppercase tracking-widest ${panelError ? 'text-red-500' : 'text-green-600'}`}>
+                {panelError || panelSuccess}
+              </p>
+            )}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+const ReviewBooster = ({ onLogout, lockedBusinessName }: { onLogout: () => void; lockedBusinessName: string }) => {
   const [partnerData, setPartnerData] = useState<PartnerData>(() => {
     const saved = localStorage.getItem('dx_partner_data');
+    const defaultData: PartnerData = { businessName: lockedBusinessName, location: null };
     if (saved) {
       const parsed = JSON.parse(saved);
       // Data migration for single location if needed
       if (Array.isArray(parsed.locations)) {
         return {
-          businessName: parsed.businessName,
+          businessName: lockedBusinessName,
           location: parsed.locations.find((l: any) => l.id === parsed.activeLocationId) || parsed.locations[0] || null
         };
       }
-      return parsed;
+      return {
+        businessName: lockedBusinessName,
+        location: parsed.location || null
+      };
     }
-    return { businessName: '', location: null };
+    return defaultData;
   });
 
-  const [showSetup, setShowSetup] = useState(!partnerData.businessName);
   const [showLinks, setShowLinks] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedMood, setSelectedMood] = useState<Mood>(5);
@@ -195,18 +632,13 @@ const ReviewBooster = ({ onLogout }: { onLogout: () => void }) => {
   const [countryCode, setCountryCode] = useState('+91');
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState(0);
 
-  const businessSuggestions = useMemo(() => [
-    'DhandhaX Cafe',
-    'DhandhaX Restaurant',
-    'DhandhaX Properties',
-    'DhandhaX Services',
-    'DhandhaX Research',
-    'DhandhaX Labs',
-    'DhandhaX Banquet',
-    'DhandhaX Interiors'
-  ], []);
-
-  const animatedPlaceholder = useAnimatedPlaceholder(businessSuggestions);
+  useEffect(() => {
+    setPartnerData(prev => (
+      prev.businessName === lockedBusinessName
+        ? prev
+        : { ...prev, businessName: lockedBusinessName }
+    ));
+  }, [lockedBusinessName]);
 
   useEffect(() => {
     localStorage.setItem('dx_partner_data', JSON.stringify(partnerData));
@@ -248,7 +680,7 @@ const ReviewBooster = ({ onLogout }: { onLogout: () => void }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center pt-8 pb-16 px-4 overflow-x-hidden">
-      <HeaderLogo businessName={partnerData.businessName} onEdit={() => setShowSetup(true)} />
+      <HeaderLogo businessName={partnerData.businessName} />
 
       <motion.main 
         initial={{ y: 20, opacity: 0 }}
@@ -422,41 +854,6 @@ const ReviewBooster = ({ onLogout }: { onLogout: () => void }) => {
       </motion.main>
 
       <AnimatePresence>
-        {showSetup && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 30 }} className="relative bg-white w-full max-w-sm rounded-3xl p-8 sm:p-10 shadow-2xl border border-white">
-              <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-100">
-                <Edit2 className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 mb-2 text-center">Brand Setup</h3>
-              <p className="text-slate-500 text-[10px] font-bold text-center mb-8 uppercase tracking-widest opacity-60">Signature Customization</p>
-              <div className="relative mb-8">
-                 <input 
-                  autoFocus
-                  type="text" 
-                  className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-blue-500 focus:outline-none text-center text-lg shadow-inner z-10 relative bg-transparent"
-                  placeholder=""
-                  value={partnerData.businessName}
-                  onChange={(e) => setPartnerData(prev => ({ ...prev, businessName: e.target.value }))}
-                />
-                {!partnerData.businessName && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 font-bold text-lg">
-                    {animatedPlaceholder}
-                  </div>
-                )}
-              </div>
-              <button 
-                disabled={!partnerData.businessName}
-                onClick={() => setShowSetup(false)}
-                className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl disabled:opacity-50 shadow-lg uppercase tracking-widest text-xs active:bg-black transition-colors"
-              >
-                PROCEED
-              </button>
-            </motion.div>
-          </div>
-        )}
-
         {showLinks && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLinks(false)} className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
@@ -529,23 +926,50 @@ const ReviewBooster = ({ onLogout }: { onLogout: () => void }) => {
 // --- Authentication & Session Manager ---
 
 export default function App() {
+  const [brandCodeMap, setBrandCodeMap] = useState<BrandCodeMap>(() => getInitialBrandCodeMap());
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [activeCode, setActiveCode] = useState('');
+  const [brandName, setBrandName] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showCodePrompt, setShowCodePrompt] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(BRAND_USERS_KEY, JSON.stringify(brandCodeMap));
+  }, [brandCodeMap]);
 
   useEffect(() => {
     const expiry = localStorage.getItem(SESSION_KEY);
-    if (expiry && parseInt(expiry) > Date.now()) {
+    const storedCode = localStorage.getItem(BRAND_CODE_SESSION_KEY) || '';
+    const restoredBrand = storedCode ? brandCodeMap[storedCode] : '';
+    if (expiry && parseInt(expiry) > Date.now() && storedCode && restoredBrand) {
+      setActiveCode(storedCode);
+      setBrandName(restoredBrand);
       setIsUnlocked(true);
+      return;
     }
-  }, []);
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(BRAND_CODE_SESSION_KEY);
+    localStorage.removeItem(BRAND_SESSION_KEY);
+    setActiveCode('');
+    setBrandName('');
+    setIsUnlocked(false);
+  }, [brandCodeMap]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (AUTHORIZED_PASSWORDS.includes(password.trim())) {
+    const enteredCode = password.trim();
+    const matchedBrandName = brandCodeMap[enteredCode];
+    if (matchedBrandName) {
       const expiry = Date.now() + SESSION_DURATION;
       localStorage.setItem(SESSION_KEY, expiry.toString());
+      localStorage.setItem(BRAND_CODE_SESSION_KEY, enteredCode);
+      localStorage.setItem(BRAND_SESSION_KEY, matchedBrandName);
+      setActiveCode(enteredCode);
+      setBrandName(matchedBrandName);
       setIsUnlocked(true);
+      setShowCodePrompt(false);
       setAuthError(false);
     } else {
       setAuthError(true);
@@ -553,85 +977,176 @@ export default function App() {
     }
   };
 
+  const handleOpenTool = () => {
+    setPassword('');
+    setAuthError(false);
+    setShowCodePrompt(true);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(BRAND_CODE_SESSION_KEY);
+    localStorage.removeItem(BRAND_SESSION_KEY);
     setIsUnlocked(false);
+    setActiveCode('');
+    setBrandName('');
     setPassword('');
+    setShowCodePrompt(false);
+  };
+
+  const handleSaveUsers = (nextUsers: BrandCodeMap) => {
+    const sanitized = sanitizeBrandCodeMap(nextUsers);
+    setBrandCodeMap(sanitized);
+    if (activeCode && !sanitized[activeCode]) {
+      handleLogout();
+    }
+  };
+
+  const handleResetUsers = () => {
+    const defaults = { ...DEFAULT_BRAND_CODE_MAP };
+    setBrandCodeMap(defaults);
+    if (activeCode && !defaults[activeCode]) {
+      handleLogout();
+    }
   };
 
   if (!isUnlocked) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-5 sm:p-10 selection:bg-blue-100 overflow-hidden">
-        <motion.div 
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          className="w-full max-w-sm text-center will-change-transform"
-        >
-          <div className="flex flex-col items-center mb-10">
-            <div className="flex gap-2 mb-6">
+      <div className="min-h-screen bg-slate-50 selection:bg-blue-100 overflow-hidden relative">
+        <div className="absolute -top-40 -left-28 w-96 h-96 rounded-full bg-blue-100/60 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-yellow-100/60 blur-3xl pointer-events-none" />
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 via-red-500 to-green-500" />
+
+        <div className="w-full max-w-6xl mx-auto px-5 sm:px-8 py-8 sm:py-12 relative z-10">
+          <div className="flex justify-end mb-8">
+            <button
+              type="button"
+              onClick={() => setShowAdminPanel(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-full shadow-sm text-slate-700 text-[11px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors"
+            >
+              <User className="w-4 h-4" />
+              Admin Login
+            </button>
+          </div>
+
+          <motion.section
+            initial={{ y: 12, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.35 }}
+            className="text-center mb-10"
+          >
+            <div className="flex justify-center gap-2 mb-6">
               <Star className="w-7 h-7 sm:w-9 sm:h-9 text-[#4285F4] fill-current" />
               <Star className="w-7 h-7 sm:w-9 sm:h-9 text-[#EA4335] fill-current" />
               <Star className="w-7 h-7 sm:w-9 sm:h-9 text-[#FBBC05] fill-current" />
               <Star className="w-7 h-7 sm:w-9 sm:h-9 text-[#34A853] fill-current" />
             </div>
-            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tighter uppercase mb-1 leading-none">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">
               Dhandha X
             </h1>
             <h2 className="text-sm sm:text-base font-bold text-blue-600 tracking-[0.4em] uppercase opacity-60">
               Partner Suite
             </h2>
-          </div>
+            <p className="mt-4 text-slate-500 font-bold text-xs uppercase tracking-[0.2em]">
+              Choose a tool to continue
+            </p>
+          </motion.section>
 
-          <div className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 shadow-2xl shadow-slate-200/60 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 via-red-500 to-green-500" />
-            
-            <div className="w-20 h-20 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-slate-100">
-              <ShieldCheck className="w-10 h-10 text-white" />
+          <motion.div
+            initial={{ y: 16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.35, delay: 0.05 }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5"
+          >
+            <button
+              type="button"
+              onClick={handleOpenTool}
+              className="text-left bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-lg shadow-slate-200/50 hover:border-blue-400 hover:bg-blue-50 transition-all active:scale-[0.99]"
+            >
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600 mb-2">App 01</p>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Review Booster</h3>
+              <p className="mt-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Send review requests instantly</p>
+            </button>
+
+            <div className="bg-white/80 border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">App 02</p>
+              <h3 className="text-2xl font-black text-slate-400 tracking-tight uppercase">Campaign Hub</h3>
+              <p className="mt-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Coming soon</p>
             </div>
-            
-            <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Partner Portal</h2>
-            <p className="text-slate-400 font-bold text-[9px] uppercase tracking-[0.3em] mb-10">Secure Authentication</p>
-            
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="relative">
-                <input 
-                  autoFocus
-                  type="password"
-                  placeholder="••••••••"
-                  className={`w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-xl text-center font-black tracking-[0.5em] text-lg focus:outline-none transition-all active:bg-white ${authError ? 'border-red-500 bg-red-50 ring-2 ring-red-100' : 'focus:border-blue-600 focus:bg-white shadow-inner'}`}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <AnimatePresence>
-                  {authError && (
-                    <motion.p 
-                      initial={{ opacity: 0, y: 5 }} 
-                      animate={{ opacity: 1, y: 0 }} 
-                      exit={{ opacity: 0 }}
-                      className="absolute -bottom-7 left-0 right-0 text-red-500 text-[9px] font-black uppercase tracking-[0.4em]"
-                    >
-                      Access Denied
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-              </div>
-              <button 
-                type="submit"
-                className="w-full py-5 bg-blue-600 text-white font-black rounded-xl hover:bg-slate-900 transition-all uppercase tracking-[0.4em] text-[10px] shadow-lg shadow-blue-50 mt-4 active:scale-95 will-change-transform"
+
+            <div className="bg-white/80 border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">App 03</p>
+              <h3 className="text-2xl font-black text-slate-400 tracking-tight uppercase">Insights Board</h3>
+              <p className="mt-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Coming soon</p>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ y: 18, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.35, delay: 0.1 }}
+          >
+            <FeedbackSection />
+          </motion.div>
+        </div>
+
+        <AnimatePresence>
+          {showCodePrompt && (
+            <div className="fixed inset-0 z-[125] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => {
+                  setShowCodePrompt(false);
+                  setAuthError(false);
+                }}
+                className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.95, y: 12, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, y: 12, opacity: 0 }}
+                className="relative w-full max-w-sm bg-white rounded-3xl p-7 sm:p-8 border border-slate-200 shadow-2xl"
               >
-                UNLOCK SYSTEM
-              </button>
-            </form>
-          </div>
-          
-          <p className="mt-12 text-[9px] font-black text-slate-300 uppercase tracking-[0.5em] opacity-50">
-            PROTECTED BY DHANDHA X ENCRYPTION
-          </p>
-        </motion.div>
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight text-center mb-2">Review Booster</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] text-center mb-6">Enter Access Code</p>
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <input
+                    autoFocus
+                    type="password"
+                    placeholder="Enter your code"
+                    className={`w-full px-5 py-4 bg-slate-50 border rounded-xl text-center font-black text-base focus:outline-none transition-all ${authError ? 'border-red-500 bg-red-50 ring-2 ring-red-100' : 'border-slate-200 focus:border-blue-600 focus:bg-white shadow-inner'}`}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  {authError && (
+                    <p className="text-center text-red-500 text-[10px] font-black uppercase tracking-[0.3em]">Invalid Code</p>
+                  )}
+                  <button
+                    type="submit"
+                    className="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase tracking-[0.3em] text-[10px] hover:bg-slate-900 transition-colors"
+                  >
+                    Open Review Booster
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AdminPanel
+          isOpen={showAdminPanel}
+          onClose={() => setShowAdminPanel(false)}
+          brandCodeMap={brandCodeMap}
+          onSaveUsers={handleSaveUsers}
+          onResetToDefault={handleResetUsers}
+        />
       </div>
     );
   }
 
-  return <ReviewBooster onLogout={handleLogout} />;
+  return <ReviewBooster onLogout={handleLogout} lockedBusinessName={brandName} />;
 }
+
