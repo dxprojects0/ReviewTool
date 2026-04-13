@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import TopPromoBar from "./TopPromoBar"; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
@@ -236,20 +237,27 @@ const FeedbackSection = () => (
 
 const HeaderLogo = ({ businessName }: { businessName: string }) => (
   <div className="flex flex-col items-center mb-6 w-full px-4 text-center">
+
+                      <TopPromoBar/>
+
+
     <motion.div 
       initial={{ y: -10, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="flex gap-1.5 mb-4"
+      className="flex gap-1.5 mb-4 mt-10"
     >
       <Star className="w-5 h-5 sm:w-7 sm:h-7 text-[#4285F4] fill-current" />
       <Star className="w-5 h-5 sm:w-7 sm:h-7 text-[#EA4335] fill-current" />
       <Star className="w-5 h-5 sm:w-7 sm:h-7 text-[#FBBC05] fill-current" />
       <Star className="w-5 h-5 sm:w-7 sm:h-7 text-[#34A853] fill-current" />
     </motion.div>
+                              
+
     
-    <div className="space-y-0">
+    <div className="space-y-0 ">
+
       <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tighter uppercase leading-none">
-        Dhandha X
+        Dhanda X
       </h1>
       <h2 className="text-base sm:text-xl font-bold text-blue-600 tracking-[0.3em] uppercase opacity-90">
         ReviewBooster
@@ -1013,11 +1021,14 @@ export default function App() {
   if (!isUnlocked) {
     return (
       <div className="min-h-screen bg-slate-50 selection:bg-blue-100 overflow-hidden relative">
+
         <div className="absolute -top-40 -left-28 w-96 h-96 rounded-full bg-blue-100/60 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-yellow-100/60 blur-3xl pointer-events-none" />
         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 via-red-500 to-green-500" />
+                      <TopPromoBar/>
 
-        <div className="w-full max-w-6xl mx-auto px-5 sm:px-8 py-8 sm:py-12 relative z-10">
+
+        <div className="w-full max-w-6xl mx-auto px-5 sm:px-8 py-8 sm:py-12 relative z-10 mt-10">
           <div className="flex justify-end mb-8">
             <button
               type="button"
@@ -1028,6 +1039,9 @@ export default function App() {
               Admin Login
             </button>
           </div>
+
+
+
 
           <motion.section
             initial={{ y: 12, opacity: 0 }}
@@ -1040,9 +1054,12 @@ export default function App() {
               <Star className="w-7 h-7 sm:w-9 sm:h-9 text-[#EA4335] fill-current" />
               <Star className="w-7 h-7 sm:w-9 sm:h-9 text-[#FBBC05] fill-current" />
               <Star className="w-7 h-7 sm:w-9 sm:h-9 text-[#34A853] fill-current" />
+              
             </div>
+
+
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">
-              Dhandha X
+              Dhanda X
             </h1>
             <h2 className="text-sm sm:text-base font-bold text-blue-600 tracking-[0.4em] uppercase opacity-60">
               Partner Suite
@@ -1050,6 +1067,8 @@ export default function App() {
             <p className="mt-4 text-slate-500 font-bold text-xs uppercase tracking-[0.2em]">
               Choose a tool to continue
             </p>
+
+
           </motion.section>
 
           <motion.div
