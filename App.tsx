@@ -37,7 +37,7 @@ const BRAND_SESSION_KEY = 'dx_brand_name';
 const BRAND_CODE_SESSION_KEY = 'dx_brand_code';
 const BRAND_USERS_KEY = 'dx_brand_users';
 const SESSION_DURATION = 15 * 24 * 60 * 60 * 1000; 
-const ADMIN_PANEL_PASSWORD = 'dxadmin2026';
+const ADMIN_PANEL_PASSWORD = 'dxadmin2028!';
 
 type BrandCodeMap = Record<string, string>;
 const DEFAULT_BRAND_CODE_MAP = brandCodes as BrandCodeMap;

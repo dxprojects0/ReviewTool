@@ -22,14 +22,14 @@ const TopPromoBar = () => {
         </div>
 
         {/* ACTION BUTTON */}
-        <a
-          href="https://dxerp.netlify.app/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-5 py-2 text-xs font-black rounded-md border-2 border-blue-600 hover:bg-white hover:text-blue-600 transition-all"
-        >
-          TRY FREE
-        </a>
+       <a
+  href="https://dxerp.netlify.app/"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-600 text-white px-3 py-1 text-xs font-black rounded-md border-2 border-blue-600 hover:bg-white hover:text-blue-600 transition-all"
+>
+  TRY FREE
+</a>
       </div>
 
       {/* Animation */}
